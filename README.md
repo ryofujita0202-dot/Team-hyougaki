@@ -5,9 +5,10 @@
 > **学んだ動画を記録 → 自動要約（Wikipedia＋AI） → ログ化 → 育成要素（魚が育つ）**
 > 学びを「見える化」して、継続をゲーム感覚で後押しします。
 >
-- アーキテクチャ概要 →https://github.com/ryofujita0202-dot/Team-hyougaki/wiki/%E3%83%95%E3%82%A9%E3%83%AB%E3%83%80%E8%A7%A3%E8%AA%AC 
-- 画面ワイヤーフレーム → https://github.com/ryofujita0202-dot/Team-hyougaki/blob/main/docs/docs/wireframes.md
-- 要件定義 →https://github.com/ryofujita0202-dot/Team-hyougaki/blob/main/docs/requirements_definition.md
+- [アーキテクチャ概要](../../wiki/フォルダ解説)
+- [画面ワイヤーフレーム](./docs/docs/wireframes.md)
+- [要件定義](./docs/requirements_definition.md)
+
 ----
 
 ## プロジェクト概要
@@ -219,6 +220,7 @@ streamlit run app.py
 * 情報設計／UI設計／親ビュー（ダッシュボード・フィルタ）
 * YouTube & Wiki連携／要約生成（Gemini）／サービス層
 * Supabaseスキーマ／認証連携／子ビュー（登録・一覧・育成表示）
+
 
 
 
