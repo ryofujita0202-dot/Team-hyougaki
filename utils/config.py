@@ -14,3 +14,7 @@ class Settings:
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
 
 settings = Settings()
+
+
+git commit -m "環境変数・定数の読み込み／設定"
+git push
