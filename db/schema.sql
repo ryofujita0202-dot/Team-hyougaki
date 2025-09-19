@@ -1,0 +1,1 @@
+-- See README for full schema; this is a placeholder file.
