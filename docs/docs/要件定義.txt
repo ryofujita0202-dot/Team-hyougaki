@@ -1,0 +1,273 @@
+了解です。いただいたアーキテクチャを土台に、\*\*要件定義（SRS）\*\*を1枚で把握できる構成に落とし込みました。これをベースに実装へ進めます。
+
+---
+
+# GyoLog 要件定義（SRS）
+
+## 0. 目的 / スコープ
+
+* **目的**：YouTube学習の視聴記録を自動化し、音声→テキスト化→要約→評価→学習レベル可視化（魚の成長）まで一気通貫で行う。
+* **対象ユーザー**：個人学習者／親子学習（子＝視聴・入力、親＝見守り・集計）
+
+---
+
+## 1. ユースケース / ユーザーストーリー
+
+* **UC-01 検索**：ユーザーはアプリ内の検索ボックスから学びたいテーマを検索し、候補動画を一覧で確認できる。
+* **UC-02 視聴**：候補からYouTube動画を選択して視聴。視聴後（または視聴中に）評価とメモを入力できる。
+* **UC-03 自動要約**：視聴した動画の音声を抽出→音声認識（STT）→要約（Gemini 2.5 Flash）。一覧に「内容サマリ」を自動添付。
+* **UC-04 ログ保存**：視聴リスト、視聴日時、評価、視聴回数、内容サマリ、画像（サムネ or 生成魚）などをSupabaseに保存。
+* **UC-05 学習レベル可視化**：視聴回数・視聴時間に基づくレベル計算で魚のサイズを変化させて表示。
+* **UC-06 ログイン/突合**：Supabase Authのユーザー情報（ID/アドレス/パスワード）と視聴ログを突合し、本人データのみ閲覧可。
+* **UC-07 テキスト拡張（Nano Banana）**：短いメモを「Nano Banana」スタイルのプロンプトで、意味を保ったまま補足・可読化する。
+
+---
+
+## 2. 機能要件
+
+### 2.1 インプット
+
+* **F-INPUT-1 検索**
+
+  * キーワードを入力するとYouTube検索APIで上位N件（Nは設定、既定10）を表示。
+  * 各カードに：タイトル、チャンネル、再生時間、サムネイル、視聴ボタン。
+* **F-INPUT-2 視聴**
+
+  * アプリ内にYouTube IFrame埋め込み（再生・一時停止・終了イベントを取得）。
+  * 終了時刻（ENDED）をトリガーに「視聴済み候補」としてフォームを自動展開。
+* **F-INPUT-3 評価入力**
+
+  * 5段階評価（1–5）と任意メモ。保存時に既存視聴回数へ+1。
+
+### 2.2 YouTube API
+
+* **F-YT-1 動画ID取得**：URL/検索結果からvideoId抽出・保持。
+* **F-YT-2 オーディオ抽出**
+
+  * `yt-dlp` 等で音声ストリームを一時ファイルとして取得（**サーバーサイドのみ**）。
+  * 失敗時はストリーミングSTTの代替（IFrameの再生時間とメモのみ保存）にフォールバック。
+
+> 注：YouTube利用規約に配慮し、**配信方法は自前で管理**。学内・個人用途のPoC前提。商用は要法務確認。
+
+### 2.3 Google API
+
+* **F-GCP-1 Speech-to-Text（STT）**
+
+  * 音声ファイル（FLAC/LINEAR16）をGoogle Cloud Speech-to-Textへ送信し、全文テキスト（タイムスタンプ含む）を取得。
+* **F-GCP-2 Gemini 2.5 Flash 要約**
+
+  * 入力：STTテキスト＋メモ（任意）
+  * 出力：
+
+    * 要点箇条書き（5点以内）
+    * 3行要約
+    * 章立て（最大5章）
+    * 引用範囲（開始/終了秒）配列（任意）
+  * 形式：JSONで保存可能な構造。
+
+### 2.4 Supabase データテーブル
+
+* **F-DB-1 保存**：以下を保存・更新できること。
+
+  * 視聴リスト、視聴日時、内容サマリ、評価、視聴回数、画像（パス/URL）、ID（主キー）
+* **F-DB-2 認証・突合**：Supabase AuthのユーザーIDと各レコードを関連付け。**RLS有効化**。
+
+### 2.5 学習レベル計算（Python）
+
+* **F-LV-1 係数設計**
+
+  * `level_raw = α * total_watch_minutes + β * total_watch_count + γ * streak_days`
+  * 既定：α=1.0, β=2.0, γ=1.5（環境変数で可変）
+* **F-LV-2 正規化**
+
+  * `level = clamp( floor(level_raw / scale), 1, 100 )`（scale既定=10）
+* **F-LV-3 魚サイズ**
+
+  * `fish_size_percent = min(100, 20 + level * 0.8)`（UI進捗バーや画像スケールに反映）
+
+### 2.6 Google AI Studio（Nano Banana）
+
+* **F-NB-1 テキスト拡張**
+
+  * 入力：ユーザーメモや要約ドラフト
+  * 命令：「**Nano Banana**」＝短文を意味保持したまま、わかりやすい自然文に拡張（余計な脚色を避け、具体例を1つまで）。
+  * 出力：100–300字程度の拡張文（日本語）
+
+### 2.7 ログイン・権限
+
+* **F-AUTH-1**：Supabase Auth（Email/Password）でアカウント作成・ログイン。
+* **F-AUTH-2**：`app_user` テーブルにロール（parent/child）・表示名を保持。
+* **F-AUTH-3**：RLSで**自分のレコードのみ**読書き可。親ロールは子の閲覧を限定的に許可（同一family\_id内）。
+
+### 2.8 アウトプット
+
+* **F-OUT-1 視聴リスト**：
+
+  * 列：タイトル／チャンネル／内容サマリ（折りたたみ）／評価／視聴日時／視聴回数／リンク
+* **F-OUT-2 魚の画像**：
+
+  * レベルに応じてサイズ変化（小・中・大）。初期はサムネの横にSVG/PNGをレイヤー表示。
+
+---
+
+## 3. データモデル（Supabase / Postgres）
+
+### 3.1 ユーザー
+
+* **app\_user**
+
+  * `id` UUID PK
+  * `auth_user_id` UUID unique（Supabase Auth uid）
+  * `role` TEXT `('parent','child')`
+  * `display_name` TEXT
+  * `family_id` UUID（親子突合用、任意）
+  * `created_at` TIMESTAMPTZ default now()
+
+### 3.2 動画・視聴ログ
+
+* **video**（キャッシュ用、任意）
+
+  * `id` UUID PK
+  * `video_id` TEXT index（YouTubeのID）
+  * `title` TEXT
+  * `channel_title` TEXT
+  * `duration_seconds` INT
+  * `thumbnail_url` TEXT
+  * `created_at` TIMESTAMPTZ
+
+* **view\_log**
+
+  * `id` UUID PK
+  * `user_id` UUID FK → app\_user.id
+  * `video_id` TEXT
+  * `watched_at` TIMESTAMPTZ
+  * `watch_seconds` INT（IFrameイベント合算の目安値、なければnull）
+  * `rating` INT check 1–5
+  * `note` TEXT
+  * `summary_json` JSONB（Gemini出力）
+  * `wiki_summary` TEXT（任意）
+  * `thumbnail_url` TEXT（画像）
+  * `view_count_accum` INT（同動画に対する累計）
+  * `created_at` TIMESTAMPTZ
+
+* **achievement**（任意）
+
+  * `id` UUID PK
+  * `user_id` UUID FK
+  * `badge_code` TEXT
+  * `awarded_at` TIMESTAMPTZ
+
+> RLS ポリシー：`view_log.user_id = auth.uid()` のみ可視。親は `family_id` 照合で子の `user_id` を許可。
+
+---
+
+## 4. 外部連携 & 依存
+
+### 4.1 YouTube Data API
+
+* **利用**：`search.list`, `videos.list`
+* **入力**：APIキー、クエリ、maxResults
+* **出力**：タイトル／チャンネル／再生時間／サムネURL／videoId
+
+### 4.2 オーディオ抽出
+
+* **方法**：`yt-dlp` サーバー側実行で音声のみ抽出（フォーマット：`wav` or `flac`）
+* **注意**：一時保存 → STT完了後削除。ストレージに保持しない。
+
+### 4.3 Google Cloud Speech-to-Text
+
+* **入力**：音声ファイル（GCS or バイナリ）、サンプリングレート
+* **出力**：転写テキスト（言語：`ja-JP`）、ワードタイムスタンプ（任意）
+
+### 4.4 Google AI Studio（Gemini 2.5 Flash）
+
+* **要約**：STTテキストを要約JSONへ
+* **Nano Banana**：短文拡張テキスト生成
+
+### 4.5 Supabase
+
+* **Auth**：Email/Password
+* **DB**：Postgres（RLS有効）
+* **Storage**：サムネ代替画像（任意）
+
+---
+
+## 5. 非機能要件
+
+* **パフォーマンス**：検索→一覧表示まで ≤ 2s（API待ち除く）。要約生成 ≤ 15s（キュー表示）。
+* **可用性**：サービスダウン時は「視聴＋メモ＋評価」だけでも保存可能（要約は後追いジョブ）。
+* **セキュリティ**：RLS必須、APIキーはサーバー側のみ保持。HTTPS必須。
+* **ログ/監査**：API失敗・転写失敗・要約失敗はイベントログに記録。
+* **プライバシー**：音声は処理後即削除。学習テキストはユーザーの明示同意なしに外部公開しない。
+
+---
+
+## 6. 例外処理 / フォールバック
+
+* **YouTube検索失敗**：メッセージ＋リトライ、過去保存のローカル候補を表示。
+* **音声抽出失敗**：STTスキップ→ユーザーメモのみで要約（または後処理キューへ）。
+* **STT失敗**：元メモのみで要約、またはNA表示。
+* **Gemini失敗**：Wiki要約（あれば）とメモのみ表示。
+* **Supabase障害**：セッション内に一時保存→復旧後アップロード。
+
+---
+
+## 7. 画面要件（MVP）
+
+* **検索画面**：検索ボックス、結果カード（再生・保存）。
+* **視聴/記録画面**：IFrame、評価（1–5）、メモ入力、保存ボタン。
+* **一覧画面**：タイトル／内容サマリ（折りたたみ）／評価／日時／回数。
+* **ダッシュボード**：総視聴時間・回数・連続日数・魚サイズ（進捗バー or 画像スケール）。
+
+---
+
+## 8. 環境変数（.env）
+
+```
+# YouTube / Google
+YOUTUBE_API_KEY=
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/gcp-key.json # STT
+GOOGLE_AI_STUDIO_API_KEY=
+
+# Supabase
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=   # サーバー側保管、RLS管理用（クライアントに出さない）
+
+# Level parameters
+LEVEL_ALPHA=1.0
+LEVEL_BETA=2.0
+LEVEL_GAMMA=1.5
+LEVEL_SCALE=10
+```
+
+---
+
+## 9. 受け入れ基準（抜粋）
+
+* [ ] 検索→結果10件以上表示、各カードにタイトル/サムネ/再生時間が出る
+* [ ] 視聴後に評価とメモを保存でき、一覧で確認できる
+* [ ] 1本の動画でSTT→要約→一覧サマリ反映が通る
+* [ ] 同一動画を2回視聴すると視聴回数=2になり、レベルが増加する
+* [ ] ログインユーザー以外のデータが閲覧できない（RLSテスト）
+* [ ] Nano Banana実行でメモが100–300字に拡張される
+* [ ] 魚サイズがレベルに応じて明確に変化する（閾値テスト）
+
+---
+
+## 10. リリース計画（MVP → P1）
+
+* **MVP**：検索／視聴／評価・メモ保存／STT→要約→一覧／レベル可視化
+* **P1**：連続日数トラッキング（streak）／親ビュー（family\_id）／後処理キュー（失敗リトライ）／書き出し（CSV/Markdown）
+
+---
+
+## 11. 実装メモ（先回り）
+
+* IFrameの `onStateChange(ENDED)` を捕捉→視聴秒数を概算加算。
+* 音声抽出は**バックエンドのみ**で実行し、フロントからはキックするだけ。
+* STTは長尺対応のため非同期処理（ポーリング or ジョブID管理）を想定。
+* 要約JSONスキーマは **`{ points:[], three_lines:[], chapters:[], quotes:[{start,end}] }`** で固定。
+* 画像は初期は**サムネイルURL**を使用、魚画像はSVGスケールで代用→後で差し替え可能。
+
+-
