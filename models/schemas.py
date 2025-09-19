@@ -20,3 +20,7 @@ class ViewLog(BaseModel):
     wiki_summary: Optional[str] = None
     thumbnail_url: Optional[str] = None
     view_count_accum: int = 1
+
+git commit -m "アプリ内の「データ型/スキーマ」定義（例：Pydanticのモデル）。
+DB行やAPIレスポンスを安全に扱うための型。"
+git push
