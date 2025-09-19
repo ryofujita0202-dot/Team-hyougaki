@@ -5,10 +5,6 @@
 > **学んだ動画を記録 → 自動要約（Wikipedia＋AI） → ログ化 → 育成要素（魚が育つ）**
 > 学びを「見える化」して、継続をゲーム感覚で後押しします。
 
-- アーキテクチャ概要 → https://github.com/<Org>/<Repo>/wiki/Directory-Structure
-- 画面ワイヤーフレーム → https://github.com/<Org>/<Repo>/wiki/Wireframes
-- 要件定義 → https://github.com/<Org>/<Repo>/wiki/Requirements
-
 ---
 
 ## プロジェクト概要
@@ -220,6 +216,7 @@ streamlit run app.py
 * 情報設計／UI設計／親ビュー（ダッシュボード・フィルタ）
 * YouTube & Wiki連携／要約生成（Gemini）／サービス層
 * Supabaseスキーマ／認証連携／子ビュー（登録・一覧・育成表示）
+
 
 
 
