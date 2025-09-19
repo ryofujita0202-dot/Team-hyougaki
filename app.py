@@ -19,3 +19,7 @@ elif page == "子ビュー":
 elif page == "親ビュー":
     from views.parent_view import render as render_parent
     render_parent()
+
+
+git commit -m "アプリの起動スクリプト（エントリーポイント）"
+git push
