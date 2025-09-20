@@ -7,7 +7,8 @@
 >
 - [アーキテクチャ概要](../../wiki/フォルダ解説)
 - [画面ワイヤーフレーム](./docs/docs/wireframes.md)
-- [要件定義](docs/docs/要件定義書.md)
+- [要件定義](./docs/requirements_definition.md)
+
 ----
 
 ## プロジェクト概要
@@ -219,7 +220,6 @@ streamlit run app.py
 * 情報設計／UI設計／親ビュー（ダッシュボード・フィルタ）
 * YouTube & Wiki連携／要約生成（Gemini）／サービス層
 * Supabaseスキーマ／認証連携／子ビュー（登録・一覧・育成表示）
-
 
 
 
