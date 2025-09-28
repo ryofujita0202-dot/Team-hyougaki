@@ -422,17 +422,16 @@ elif st.session_state.get('page') == 'list':
                         st.caption("メモ: なし")
 
                     # 視聴入力フォーム（expander 内フォーム）
-                    with st.expander("視聴記録/メモを見る", expanded=False):
+                    with st.expander("視聴記録", expanded=False):
                         with st.form(key=f"view_form_{v.id}"):
                             comp = st.selectbox("理解度", options=[1,2,3], format_func=lambda x: {1:'①覚えた',2:'②普通',3:'③覚えていない'}[x], index=1)
                             minutes = st.number_input("視聴時間（分）", min_value=0, value=0, step=1)
-                            note_text = st.text_area("メモ（任意）", value="")
                             submit_view = st.form_submit_button("視聴を記録")
 
                         if submit_view:
                             with get_session() as s2:
                                 duration_sec = int(minutes * 60)
-                                new_view = View(video_id=v.id, duration_sec=duration_sec, note=note_text or None, comprehension=comp)
+                                new_view = View(video_id=v.id, duration_sec=duration_sec, note=None, comprehension=comp)
                                 s2.add(new_view)
                                 # 対応する Fish を取得して更新（存在しない場合は警告）
                                 f2 = s2.exec(select(Fish).where(Fish.video_id==v.id)).first()
