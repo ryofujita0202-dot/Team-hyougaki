@@ -89,12 +89,14 @@ except Exception:
 
 from PIL import Image, ImageDraw
 
-from app.lib.db import init_db, get_session
+# モデルを先にインポートしてからデータベース初期化
 from app.lib.models import Video, View, Fish
+from app.lib.db import init_db, get_session
 from app.lib.youtube import fetch_meta
 from app.lib.summary import simple_summary
 from app.lib.forgetting import update_fish_state
 
+# データベース初期化を実行
 init_db()
 
 # ヘッダ用: 画像を base64 埋め込みにして透明背景で表示するユーティリティ
@@ -333,8 +335,14 @@ if st.session_state.get('page') == 'reg':
 elif st.session_state.get('page') == 'list':
     st.subheader("登録済み動画一覧")
     
-    with get_session() as session:
-        videos = session.exec(select(Video).order_by(Video.id.desc())).all()
+    try:
+        with get_session() as session:
+            videos = session.exec(select(Video)).all()
+            # 新しいものから表示するために逆順にする（IDが大きいものから）
+            videos = sorted(videos, key=lambda x: x.id or 0, reverse=True)
+    except Exception as e:
+        st.error(f"データベースエラー: {e}")
+        videos = []
     
     if not videos:
         st.info("まだ動画が登録されていません。")
