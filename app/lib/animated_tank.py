@@ -191,24 +191,52 @@ def render_animated_tank():
         show_advanced_fish = st.session_state.get('logged_in', False)
     # NOTE: こってぃくんBIT画像は常時使用する仕様に変更
     
-    with get_session() as ses:
-        from .models import Video, View
-        fishes = ses.exec(select(Fish)).all()
-        
-        # 金魚とビデオのペアを作成（視聴回数を含める）
-        fish_video_pairs = []
-        for fish in fishes:
-            video = ses.exec(select(Video).where(Video.id == fish.video_id)).first()
-            view_count = 0
-            if video:
-                try:
-                    views = ses.exec(select(View).where(View.video_id == video.id)).all()
-                    view_count = len(views)
-                except Exception:
+    # 金魚データの取得（エラーハンドリング強化）
+    fish_video_pairs = []
+    try:
+        with get_session() as ses:
+            from .models import Video, View
+            fishes = ses.exec(select(Fish)).all()
+            
+            # 金魚とビデオのペアを作成（視聴回数を含める）
+            for fish in fishes:
+                video = ses.exec(select(Video).where(Video.id == fish.video_id)).first()
+                view_count = 0
+                if video:
+                    try:
+                        views = ses.exec(select(View).where(View.video_id == video.id)).all()
+                        view_count = len(views)
+                    except Exception:
+                        view_count = 0
+                    fish_video_pairs.append((fish, video, view_count))
+                    
+    except Exception as e:
+        st.error(f"データベース接続エラー: {str(e)}")
+        st.info("データベースの初期化を試行します...")
+        try:
+            # データベース再初期化
+            from .db import init_db
+            init_db()
+            with get_session() as ses:
+                from .models import Video, View
+                fishes = ses.exec(select(Fish)).all()
+                
+                # 金魚とビデオのペアを作成（視聴回数を含める）
+                for fish in fishes:
+                    video = ses.exec(select(Video).where(Video.id == fish.video_id)).first()
                     view_count = 0
-            fish_video_pairs.append((fish, video, view_count))
-
-    # 高度な魚生成を使用する場合
+                    if video:
+                        try:
+                            views = ses.exec(select(View).where(View.video_id == video.id)).all()
+                            view_count = len(views)
+                        except Exception:
+                            view_count = 0
+                        fish_video_pairs.append((fish, video, view_count))
+                        
+            st.success("データベース接続が回復しました。")
+        except Exception as e2:
+            st.error(f"データベース初期化に失敗しました: {str(e2)}")
+            return    # 高度な魚生成を使用する場合
     advanced_fish_data = []
     if st.session_state.get('logged_in', False):
         try:

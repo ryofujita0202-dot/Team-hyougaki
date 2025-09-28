@@ -96,8 +96,12 @@ from app.lib.youtube import fetch_meta
 from app.lib.summary import simple_summary
 from app.lib.forgetting import update_fish_state
 
-# データベース初期化を実行
-init_db()
+# データベース初期化を実行（エラーハンドリング追加）
+try:
+    init_db()
+except Exception as e:
+    st.error(f"データベース初期化エラー: {str(e)}")
+    st.info("アプリケーションの再起動を試してください。")
 
 # ヘッダ用: 画像を base64 埋め込みにして透明背景で表示するユーティリティ
 def _img_to_data_uri(path: str) -> str:
