@@ -47,7 +47,7 @@ def get_stage_from_health(health: float) -> tuple[int, str]:
         tuple: (stage, label)
     """
     if health <= 0:
-        return (1, '💀 死亡')
+        return (1, '🤒 病気')
     elif health < 20:
         return (1, '💔 衰弱')
     elif health < 40:
@@ -740,7 +740,8 @@ def render_animated_tank():
             f, video, view_count = item
             evolution_stage = 1.0
             rarity_level = 0.0
-            is_legendary = False
+            # 健康度が95%以上の場合は伝説の金魚にする
+            is_legendary = f.health >= 95
 
         # 健康度から段階とラベルを自動計算
         stage, stage_label = get_stage_from_health(f.health)
@@ -846,15 +847,21 @@ def render_animated_tank():
             if is_legendary and 'legend' in kotti_images:
                 img_src = kotti_images['legend']
             else:
-                # 健康度に基づく画像選択（健康度が低いほど悲しい画像）
-                health_to_key = {
-                    1: 'cry',      # 0-20%: 死亡・衰弱
-                    2: 'cry',      # 20-40%: 弱っている  
-                    3: 'normal',   # 40-60%: 普通
-                    4: 'smile',    # 60-80%: 元気
-                    5: 'sparkle',  # 80-100%: 絶好調
-                }
-                preferred = health_to_key.get(stage, 'normal')
+                # 健康度に基づく画像選択
+                if f.health >= 95:
+                    # 健康度95%以上で金のこってぃくん（伝説）
+                    preferred = 'legend'
+                else:
+                    # 従来の健康度ベース選択
+                    health_to_key = {
+                        1: 'cry',      # 0-20%: 死亡・衰弱
+                        2: 'cry',      # 20-40%: 弱っている  
+                        3: 'normal',   # 40-60%: 普通
+                        4: 'smile',    # 60-80%: 元気
+                        5: 'sparkle',  # 80-94%: 絶好調
+                    }
+                    preferred = health_to_key.get(stage, 'normal')
+                
                 if preferred in kotti_images:
                     img_src = kotti_images[preferred]
                 else:

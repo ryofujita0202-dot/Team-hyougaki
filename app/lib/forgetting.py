@@ -4,7 +4,7 @@ import math
 LAMBDA = 0.20  # 減衰係数をやや緩めに調整（チューニング可能）
 THETA  = 0.4
 
-VIEWS_TARGET = 10  # 正規化で何回視聴したら engagement=1.0 とみなすか
+VIEWS_TARGET = 2  # 正規化で何回視聴したら engagement=1.0 とみなすか（2回に変更）
 
 def decay(s: float, days: float, lam=LAMBDA):
     return s * math.exp(-lam * max(days, 0))
@@ -27,9 +27,9 @@ def update_fish_state(fish, now: datetime, reviewed_today: bool, view_count: int
     Composite score = w_s * decayed_s + w_e * engagement + w_r * recency
     Returns updated fish object with fields: s, health, status, weight_g, last_update, next_due
     """
-    # 経過日数
-    days = (now - fish.last_update).total_seconds() / 86400 if fish.last_update else 9999
-    s_decayed = decay(fish.s, days)
+    # 経過時間（時間単位）
+    hours = (now - fish.last_update).total_seconds() / 3600 if fish.last_update else 9999
+    s_decayed = decay(fish.s, hours)
 
     # レビュー日のボーナスは記憶 s に対してだけ適用
     if reviewed_today:

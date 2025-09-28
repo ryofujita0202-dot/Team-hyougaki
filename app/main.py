@@ -286,7 +286,7 @@ if st.session_state.get('page') == 'reg':
                     
                     fish = Fish(
                         video_id=v.id,
-                        health=100,
+                        health=50,  # 初期健康度を50%に変更
                         weight_g=100,
                         fish_color=fish_color
                     )
@@ -497,6 +497,39 @@ if st.session_state.get('page') == 'tank':
     if st.session_state.get('user_id'):
         st.markdown("---")
         st.subheader("🎣 動的魚生成テスト")
+        
+        # 金のこってぃくんテスト機能
+        with st.expander("🏆 金のこってぃくんテスト"):
+            st.info("魚の健康度を95%以上にして金のこってぃくんを表示できます")
+            
+            with get_session() as session:
+                all_fish = session.exec(select(Fish)).all()
+                if all_fish:
+                    fish_options = []
+                    for fish in all_fish:
+                        video = session.exec(select(Video).where(Video.id == fish.video_id)).first()
+                        video_title = video.title if video else f"動画ID {fish.video_id}"
+                        fish_options.append((fish, f"{video_title} (現在の健康度: {fish.health}%)"))
+                    
+                    if fish_options:
+                        selected_fish, selected_label = st.selectbox(
+                            "健康度を変更する魚を選択:",
+                            fish_options,
+                            format_func=lambda x: x[1]
+                        )
+                        
+                        new_health = st.slider("新しい健康度", 0, 100, selected_fish.health)
+                        
+                        if st.button("健康度を更新"):
+                            selected_fish.health = new_health
+                            session.add(selected_fish)
+                            session.commit()
+                            st.success(f"健康度を{new_health}%に更新しました！")
+                            if new_health >= 95:
+                                st.success("🏆 この魚は金のこってぃくんになります！水槽ページで確認してください。")
+                            st.rerun()
+                else:
+                    st.info("まず動画を登録してください")
         
         with st.expander("動的魚生成機能をテスト"):
             from app.lib.dynamic_fish_generator import DynamicFishGenerator
