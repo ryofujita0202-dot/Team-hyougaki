@@ -291,6 +291,18 @@ if st.session_state.get('page') == 'reg':
                         fish_color=fish_color
                     )
                     session.add(fish)
+                    
+                    # 登録時に視聴記録も作成（理解度、視聴時間、メモを含む）
+                    if comprehension or watch_minutes > 0 or note.strip():
+                        view_record = View(
+                            video_id=v.id,
+                            duration_sec=int(watch_minutes * 60) if watch_minutes > 0 else None,
+                            comprehension=comprehension,
+                            note=note.strip() if note.strip() else None,
+                            viewed_at=datetime.now()
+                        )
+                        session.add(view_record)
+                    
                     session.commit()
                 
                 # Supabaseにも学習ログとして保存（ログインしている場合）
@@ -372,14 +384,14 @@ elif st.session_state.get('page') == 'list':
                     # (金魚の色表示/変更は削除されました)
                 
                 with col2:
-                    # 集計情報: 合計視聴時間, 理解度の平均, 最近のメモ
+                    # 集計情報: 合計視聴時間, 理解度の平均, 全メモ
                     with get_session() as s_stats:
                         views = s_stats.exec(select(View).where(View.video_id==v.id)).all()
                         total_seconds = sum((vv.duration_sec or 0) for vv in views)
                         comp_vals = [getattr(vv, 'comprehension', None) for vv in views if getattr(vv, 'comprehension', None) is not None]
                         avg_comprehension = (sum(comp_vals) / len(comp_vals)) if comp_vals else None
-                        recent_notes = [vv.note for vv in sorted(views, key=lambda x: x.viewed_at, reverse=True) if vv.note]
-                        recent_note = recent_notes[0] if recent_notes else None
+                        # 全てのメモを時系列順（新しい順）で取得
+                        all_notes = [(vv.note, vv.viewed_at) for vv in sorted(views, key=lambda x: x.viewed_at, reverse=True) if vv.note and vv.note.strip()]
 
                     if total_seconds > 0:
                         st.caption(f"合計視聴時間: {total_seconds//60}分 {total_seconds%60}秒")
@@ -392,8 +404,22 @@ elif st.session_state.get('page') == 'list':
                     else:
                         st.caption("理解度: 記録なし")
 
-                    if recent_note:
-                        st.caption(f"最近のメモ: {recent_note[:120]}{'...' if len(recent_note) > 120 else ''}")
+                    # 全てのメモを表示
+                    if all_notes:
+                        if len(all_notes) == 1:
+                            # メモが1つだけの場合は直接表示
+                            note_text, _ = all_notes[0]
+                            st.caption(f"メモ: {note_text[:120]}{'...' if len(note_text) > 120 else ''}")
+                        else:
+                            # 複数のメモがある場合はexpanderで表示
+                            with st.expander(f"全メモを表示 ({len(all_notes)}個)", expanded=False):
+                                for i, (note_text, note_date) in enumerate(all_notes, 1):
+                                    st.markdown(f"**{i}.** {note_date.strftime('%m/%d %H:%M')}")
+                                    st.markdown(f"　{note_text}")
+                                    if i < len(all_notes):
+                                        st.markdown("---")
+                    else:
+                        st.caption("メモ: なし")
 
                     # 視聴入力フォーム（expander 内フォーム）
                     with st.expander("視聴記録/メモを見る", expanded=False):
