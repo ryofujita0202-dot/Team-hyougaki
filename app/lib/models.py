@@ -1,6 +1,6 @@
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 class Video(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -12,9 +12,6 @@ class Video(SQLModel, table=True):
     thumbnail_url: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    views: List["View"] = Relationship(back_populates="video")
-    fish: Optional["Fish"] = Relationship(back_populates="video")
-
 class View(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -23,7 +20,6 @@ class View(SQLModel, table=True):
     duration_sec: Optional[int] = None
     comprehension: Optional[int] = None  # 1..3, 登録時/視聴時の理解度
     note: Optional[str] = None
-    video: "Video" = Relationship(back_populates="views")
 
 class Fish(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -36,4 +32,3 @@ class Fish(SQLModel, table=True):
     status: str = "alive"        # 'alive'|'weak'|'dead'
     next_due: Optional[datetime] = None
     fish_color: str = "#FF6B6B"  # 金魚の色（HEXコード）
-    video: "Video" = Relationship(back_populates="fish")
