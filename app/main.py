@@ -524,11 +524,11 @@ if st.session_state.get('page') == 'tank':
 
 # ====== ④ ログイン機能 ======
 elif st.session_state.get('page') == 'supabase':
-    st.subheader("🔑 ログイン")
+    st.subheader("🔑 ログイン・新規登録")
     
     # シンプルなログイン状態表示
     try:
-        from utils.supabase_client import get_current_user, login_user, logout_user
+        from utils.supabase_client import get_current_user, login_user, logout_user, register_user
         
         user = get_current_user()
         
@@ -542,21 +542,64 @@ elif st.session_state.get('page') == 'supabase':
         else:
             st.info("ログインすると学習履歴を記録できます。")
             
-            with st.form("simple_login_form"):
-                email = st.text_input("メールアドレス")
-                password = st.text_input("パスワード", type="password")
-                submit = st.form_submit_button("ログイン")
-                
-                if submit and email and password:
-                    result = login_user(email, password)
-                    if result and result.get("success"):
-                        st.session_state['user_id'] = result.get('user_id')
-                        st.success("ログインしました！")
-                        st.rerun()
-                    else:
-                        st.error("ログインに失敗しました。メールアドレスとパスワードを確認してください。")
+            # タブでログインと新規登録を切り替え
+            login_tab, register_tab = st.tabs(["🔑 ログイン", "👤 新規登録"])
             
-            st.caption("アカウント作成やパスワードリセットは開発用スクリプトを使用してください。")
+            with login_tab:
+                with st.form("login_form"):
+                    st.markdown("### ログイン")
+                    email = st.text_input("メールアドレス", key="login_email")
+                    password = st.text_input("パスワード", type="password", key="login_password")
+                    login_submit = st.form_submit_button("ログイン")
+                    
+                    if login_submit and email and password:
+                        result = login_user(email, password)
+                        if result and result.get("success"):
+                            st.session_state['user_id'] = result.get('user_id')
+                            st.success("ログインしました！")
+                            st.rerun()
+                        else:
+                            st.error("ログインに失敗しました。メールアドレスとパスワードを確認してください。")
+            
+            with register_tab:
+                with st.form("register_form"):
+                    st.markdown("### 新規登録")
+                    st.info("📧 登録後、確認メールが送信されます。メール認証完了後にログインしてください。")
+                    
+                    reg_email = st.text_input("メールアドレス", key="register_email", 
+                                           help="例: user@example.com")
+                    reg_password = st.text_input("パスワード", type="password", key="register_password",
+                                              help="6文字以上の英数字")
+                    reg_password_confirm = st.text_input("パスワード（確認）", type="password", key="register_password_confirm")
+                    display_name = st.text_input("表示名（オプション）", key="register_display_name",
+                                               help="空欄の場合はメールアドレスの@前の部分が使用されます")
+                    
+                    register_submit = st.form_submit_button("新規登録")
+                    
+                    if register_submit:
+                        # バリデーション
+                        if not reg_email or not reg_password:
+                            st.error("メールアドレスとパスワードは必須です。")
+                        elif len(reg_password) < 6:
+                            st.error("パスワードは6文字以上で設定してください。")
+                        elif reg_password != reg_password_confirm:
+                            st.error("パスワードが一致しません。")
+                        else:
+                            # 新規登録実行
+                            with st.spinner("アカウント作成中..."):
+                                result = register_user(reg_email, reg_password, display_name)
+                                if result and result.get("success"):
+                                    if result.get("email_confirmation_required"):
+                                        st.success("✅ アカウントが作成されました！")
+                                        st.info("📧 確認メールを送信しました。メールを確認して認証リンクをクリックしてください。")
+                                        st.warning("⚠️ メール認証完了後、ログインタブからログインしてください。")
+                                    else:
+                                        st.success("アカウント作成とログインが完了しました！")
+                                        st.rerun()
+                                else:
+                                    st.error("アカウント作成に失敗しました。しばらく待ってから再試行してください。")
+                    
+                    st.caption("⚠️ パスワードは安全に保管してください。忘れた場合の復旧機能は現在開発中です。")
             
     except ImportError as e:
         st.error(f"ログイン機能の読み込みに失敗しました: {e}")
