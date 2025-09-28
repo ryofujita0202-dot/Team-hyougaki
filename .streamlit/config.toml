@@ -1,0 +1,7 @@
+[theme]
+base="light"
+primaryColor="#D62828"           # 赤
+backgroundColor="#FFF5F5"        # 薄いピンク背景
+secondaryBackgroundColor="#FFFFFF"
+textColor="#1A1A1A"
+
