@@ -35,10 +35,110 @@ def weight_to_stage(weight: int) -> int:
         return 4
     return 5
 
-# 健康/状態ベースの5段階ラベル（候補C）
+# 健康度から段階とラベルを自動計算
+def get_stage_from_health(health: float) -> tuple[int, str]:
+    """
+    健康度（0-100）から段階（1-5）とラベルを計算
+    
+    Args:
+        health: 健康度（0-100%）
+        
+    Returns:
+        tuple: (stage, label)
+    """
+    if health <= 0:
+        return (1, '💀 死亡')
+    elif health < 20:
+        return (1, '💔 衰弱')
+    elif health < 40:
+        return (2, '😰 弱っている')
+    elif health < 60:
+        return (3, '😐 普通')
+    elif health < 80:
+        return (4, '😊 元気')
+    else:
+        return (5, '🤩 絶好調')
+
+
+def get_video_statistics(video_id: int) -> dict:
+    """
+    動画の視聴統計情報を取得
+    
+    Args:
+        video_id: 動画ID
+        
+    Returns:
+        dict: 統計情報（view_count, estimated_watch_time, comprehension_score）
+    """
+    try:
+        # 基本統計の取得
+        with get_session() as ses:
+            from .models import View, Video
+            from sqlmodel import func
+            
+            # 視聴回数（Viewテーブルから取得）
+            views = ses.exec(select(View).where(View.video_id == video_id)).all()
+            view_count = len(views)
+            
+            # 動画情報と魚の状態取得
+            video = ses.exec(select(Video).where(Video.id == video_id)).first()
+            fish = ses.exec(select(Fish).where(Fish.video_id == video_id)).first()
+            
+            # 推定視聴時間（視聴回数 × 推定動画時間）
+            estimated_duration_minutes = 10  # デフォルト10分
+            
+            # 実際の視聴時間データがある場合は使用
+            total_duration_seconds = sum(
+                v.duration_sec for v in views if v.duration_sec is not None
+            )
+            
+            if total_duration_seconds and total_duration_seconds > 0:
+                total_watch_time = int(total_duration_seconds / 60)  # 分に変換
+            else:
+                total_watch_time = view_count * estimated_duration_minutes
+            
+            # 理解度スコア計算
+            if fish:
+                # 健康度ベースの理解度計算
+                base_comprehension = fish.health * 0.8  # 健康度の80%をベース
+                
+                # 視聴回数によるボーナス（多く見るほど理解度向上）
+                engagement_bonus = min(20, view_count * 3)  # 最大20%のボーナス
+                
+                comprehension_score = min(100, base_comprehension + engagement_bonus)
+            else:
+                comprehension_score = 50  # デフォルト50%
+            
+            # 理解度記録がある場合は平均を使用
+            comprehension_records = [v.comprehension for v in views if v.comprehension is not None]
+            
+            if comprehension_records:
+                avg_comprehension = sum(comprehension_records) / len(comprehension_records)
+                # 1-3スケールを0-100%に変換
+                recorded_comprehension = (avg_comprehension - 1) * 50  # 1→0%, 2→50%, 3→100%
+                # 計算値と記録值の平均を取る
+                comprehension_score = (comprehension_score + recorded_comprehension) / 2
+        
+        return {
+            'view_count': view_count,
+            'total_watch_time_minutes': total_watch_time,
+            'comprehension_score': round(comprehension_score, 1),
+            'engagement_level': min(5, view_count // 2 + 1)  # 1-5のエンゲージメントレベル
+        }
+    
+    except Exception as e:
+        # エラー時はデフォルト値を返す
+        return {
+            'view_count': 0,
+            'total_watch_time_minutes': 0,
+            'comprehension_score': 50.0,
+            'engagement_level': 1
+        }
+
+# 後方互換性のため残しておく（廃止予定）
 HEALTH_STAGE_LABELS = {
     1: '衰弱',
-    2: '弱い',
+    2: '弱い', 
     3: '普通',
     4: '元気',
     5: '絶好調',
@@ -614,19 +714,54 @@ def render_animated_tank():
             rarity_level = 0.0
             is_legendary = False
 
-        # 視聴回数ベースで段階を決定（2回見ると段階が上がる）
-        try:
-            vc = int(view_count or 0)
-        except Exception:
-            vc = 0
-        stage = min(5, 1 + (vc // 2))
-        stage_label = HEALTH_STAGE_LABELS.get(stage, str(stage))
+        # 健康度から段階とラベルを自動計算
+        stage, stage_label = get_stage_from_health(f.health)
+        
+        # Supabaseユーザーデータがある場合は拡張ロジックを適用
+        special_effects = None
+        size_bonus = 1.0
+        user_achievements = []
+        
+        if st.session_state.get('user_id'):
+            try:
+                from .enhanced_kotti_logic_fixed import get_enhanced_kotti_state
+                # video_idをintに変換、取得できない場合はNoneのまま
+                video_id = None
+                if hasattr(video, 'id') and video.id:
+                    try:
+                        video_id = int(video.id)
+                    except (ValueError, TypeError):
+                        video_id = None
+                
+                enhanced_state = get_enhanced_kotti_state(
+                    st.session_state['user_id'], 
+                    video_id,
+                    stage  # 健康度ベースのstageを渡す
+                )
+                # 健康度ベースのstageを維持し、特殊効果のみ取得
+                special_effects = enhanced_state.get('special_effects')
+                size_bonus = enhanced_state.get('bonus_size', 1.0)
+                user_achievements = enhanced_state.get('achievements', [])
+                
+                # 実績表示
+                if user_achievements:
+                    st.sidebar.success(f"🏆 {video.title}の実績:")
+                    for achievement in user_achievements:
+                        st.sidebar.caption(achievement)
+                        
+            except Exception as e:
+                # エラー時はデフォルト値を維持
+                pass
 
         # サイズ計算（進化段階に基づくボーナス） — stage を元に大きさを決める
         # stage 1..5 を 0.6..2.0 の範囲にマップ
         base_size_factor = 0.6 + (stage - 1) * (1.4 / 4)
         evolution_bonus = 1.0 + (evolution_stage - 1.0) * 0.3  # 進化で30%ずつ大きく
-        size_factor = base_size_factor * evolution_bonus
+        
+        # Supabaseからのサイズボーナスを適用
+        enhanced_size_bonus = size_bonus if 'size_bonus' in locals() else 1.0
+        
+        size_factor = base_size_factor * evolution_bonus * enhanced_size_bonus
         font_size = int(25 * size_factor)
         
         # 透明度計算（健康度とレア度に基づく）
@@ -641,11 +776,15 @@ def render_animated_tank():
         swim_duration = max(6, int(15 / swim_speed)) / animation_speed
         
         # レジェンド魚の特殊エフェクト
-        special_effects = ""
+        css_special_effects = ""
         if is_legendary:
-            special_effects = f"""
+            css_special_effects = f"""
             animation: swim-legendary {swim_duration}s linear infinite, glow-legendary 2s ease-in-out infinite alternate;
             """
+        
+        # Supabaseからの特殊エフェクト表示（サイドバーに）
+        if 'special_effects' in locals() and special_effects and i == 0:  # 最初の魚にのみ表示
+            st.sidebar.info(f"🎉 特殊効果:             {css_special_effects}")
         
         # 高さの位置をランダムに（魚のIDに基づいて一定）
         random.seed(f.id)  # 一定の位置を保つため
@@ -672,31 +811,32 @@ def render_animated_tank():
         }
         fish_emoji = fish_emojis.get(f.fish_color, "🐠")
         
-        # 画像ソースを決定: こってぃくんBIT優先、それ以外は動的生成画像や絵文字で表示
+        # 画像ソースを決定: こってぃくんBIT優先、健康度ベースで選択
         img_src = None
         if kotti_images:
-            # 優先ルール: レジェンド優先、その後は現在の状態(stage)に合わせた固定マッピングを試す
+            # 優先ルール: レジェンド優先、その後は健康度(health)に合わせた固定マッピング
             if is_legendary and 'legend' in kotti_images:
                 img_src = kotti_images['legend']
             else:
-                # stage に基づく決定（衰弱->cry 等）
-                stage_to_key = {
-                    1: 'cry',
-                    2: 'normal',
-                    3: 'smile',
-                    4: 'sparkle',
-                    5: 'legend',
+                # 健康度に基づく画像選択（健康度が低いほど悲しい画像）
+                health_to_key = {
+                    1: 'cry',      # 0-20%: 死亡・衰弱
+                    2: 'cry',      # 20-40%: 弱っている  
+                    3: 'normal',   # 40-60%: 普通
+                    4: 'smile',    # 60-80%: 元気
+                    5: 'sparkle',  # 80-100%: 絶好調
                 }
-                preferred = stage_to_key.get(stage, 'normal')
+                preferred = health_to_key.get(stage, 'normal')
                 if preferred in kotti_images:
                     img_src = kotti_images[preferred]
                 else:
-                    # フォールバック: 既存のランダム選択ロジック
+                    # フォールバック: 健康度に基づく確率的選択
                     choices = []
-                    choices += ['normal'] * 50
-                    choices += ['smile'] * int(20 * evolution_stage)
-                    choices += ['cry'] * 10
-                    choices += ['sparkle'] * int(5 * evolution_stage)
+                    health_ratio = f.health / 100.0
+                    choices += ['cry'] * max(1, int(30 * (1.0 - health_ratio)))  # 健康度が低いほどcry多め
+                    choices += ['normal'] * 40
+                    choices += ['smile'] * max(1, int(20 * health_ratio))        # 健康度が高いほどsmile多め
+                    choices += ['sparkle'] * max(1, int(10 * health_ratio))      # 健康度が高いほどsparkle多め
                     sel = random.choice(choices)
                     if sel in kotti_images:
                         img_src = kotti_images[sel]
@@ -718,7 +858,7 @@ def render_animated_tank():
             </div>
                 <div class="fish-name" style="top: -35px; left: 50%; color: {f.fish_color};">
                 {short_title}<br>
-                💚{f.health:.0f}% 状態:{stage_label}
+                💚{f.health:.0f}%
                 {'🌟' + str(round(evolution_stage, 1)) if evolution_stage > 1.0 else ''}
                 {'👑' if is_legendary else ''}
             </div>
@@ -742,7 +882,7 @@ def render_animated_tank():
             <span style="display:inline-block; opacity:{opacity};">{fish_emoji}{'✨' if is_legendary else ''}</span>
             <div class="fish-name" style="top: -35px; left: 50%; color: {f.fish_color};">
                 {short_title}<br>
-                💚{f.health:.0f}% 状態:{stage_label}
+                💚{f.health:.0f}%
                 {'🌟' + str(round(evolution_stage, 1)) if evolution_stage > 1.0 else ''}
                 {'👑' if is_legendary else ''}
             </div>
@@ -832,15 +972,10 @@ def render_animated_tank():
             rarity_level = 0.0
             is_legendary = False
         with cols[i % len(cols)]:
+            # 健康度から段階とラベルを統一的に取得
+            stage_i, stage_label_i = get_stage_from_health(fish.health)
             health_emoji = "💚" if fish.health > 70 else "💛" if fish.health > 40 else "❤️"
-            # view_count に基づいて段階を決定（2回見るごとに段階が上がる）
-            try:
-                vc = int(view_count or 0)
-            except Exception:
-                vc = 0
-            stage_i = min(5, 1 + (vc // 2))
-            stage_label_i = HEALTH_STAGE_LABELS.get(stage_i, str(stage_i))
-            weight_emoji = "🐋" if stage_i >= 5 else "🐟" if stage_i >= 3 else "🐠"
+            weight_emoji = "🐋" if fish.weight_g > 150 else "🐟" if fish.weight_g > 75 else "🐠"
 
             # 最後の更新からの日数
             if fish.last_update:
@@ -851,24 +986,68 @@ def render_animated_tank():
             
             # 拡張情報の表示
             title_suffix = ""
-            delta_info = f"状態: {stage_label_i} | {last_view_text}"
             
             if evolution_stage > 1.0:
                 title_suffix += f" 🌟{evolution_stage:.1f}"
-                delta_info += f" | 進化Lv{evolution_stage:.1f}"
             
             if is_legendary:
                 title_suffix += " 👑"
-                delta_info += " | 伝説"
             elif rarity_level > 0.5:
                 title_suffix += " ⭐"
-                delta_info += f" | レア{rarity_level:.2f}"
             
+            # メイン健康度表示
             st.metric(
                 f"{health_emoji} {video.title[:15]}...{title_suffix}",
-                f"健康度: {fish.health:.1f}%",
-                delta=delta_info
+                f"健康度: {fish.health:.1f}%"
             )
+            
+            # 進捗バロメーター表示（3カラムレイアウト）
+            st.markdown("**📊 学習進捗**")
+            prog_col1, prog_col2, prog_col3 = st.columns(3)
+            
+            try:
+                stats = get_video_statistics(video.id)
+                
+                with prog_col1:
+                    st.metric(
+                        "📺 視聴回数",
+                        f"{stats['view_count']}回",
+                        delta="エンゲージメント" if stats['view_count'] > 0 else "未視聴"
+                    )
+                
+                with prog_col2:
+                    watch_hours = stats['total_watch_time_minutes'] / 60
+                    if watch_hours >= 1:
+                        time_display = f"{watch_hours:.1f}時間"
+                    else:
+                        time_display = f"{stats['total_watch_time_minutes']}分"
+                    
+                    st.metric(
+                        "⏱️ 視聴時間",
+                        time_display,
+                        delta="学習投資"
+                    )
+                
+                with prog_col3:
+                    comprehension_emoji = "🎓" if stats['comprehension_score'] >= 80 else "📖" if stats['comprehension_score'] >= 60 else "📚"
+                    st.metric(
+                        f"{comprehension_emoji} 理解度",
+                        f"{stats['comprehension_score']:.0f}%",
+                        delta="習得レベル"
+                    )
+                    
+            except Exception as e:
+                # エラー時はデフォルト値で表示
+                with prog_col1:
+                    st.metric("📺 視聴回数", "0回", delta="未視聴")
+                
+                with prog_col2:
+                    st.metric("⏱️ 視聴時間", "0分", delta="学習投資")
+                
+                with prog_col3:
+                    st.metric("📚 理解度", "50%", delta="習得レベル")
+                
+                st.caption(f"⚠️ データ取得エラー: {str(e)}")
     
     st.caption("💡 健康な金魚は速く泳ぎ、弱った金魚はゆっくり泳ぎます。金魚をホバーすると詳細情報が表示されます。")
     
