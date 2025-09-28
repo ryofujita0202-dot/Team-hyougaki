@@ -1,7 +1,7 @@
 # Learning Fish Tank - SUPABASE統合版
 
 <!-- 🌐 **ライブアプリ**: [https://team-hyougaki.streamlit.app/](https://team-hyougaki.streamlit.app/) -->
-🌐 **ライブアプリ**: Streamlit Cloudでデプロイ準備中...
+🌐 **ライブアプリ**: [https://team-hyougaki-hm7zjs93bn9yzaezl3ukqp.streamlit.app/](https://team-hyougaki-hm7zjs93bn9yzaezl3ukqp.streamlit.app/)
 
 📂 **GitHubリポジトリ**: [https://github.com/ryofujita0202-dot/Team-hyougaki](https://github.com/ryofujita0202-dot/Team-hyougaki)
 
